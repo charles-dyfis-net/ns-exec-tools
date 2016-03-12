@@ -1,0 +1,54 @@
+#!/bin/bash
+
+usage_content=(
+	"Usage: ${0##*/} [--if-exists] src dest [--] cmd arg..."
+)
+
+usage() {
+	printf '%s\n' "${usage_content[@]}"
+}
+
+ignore_failure=0
+
+(( $# > 2 )) || { usage; exit 1; }
+
+while [[ $1 = -* ]]; do
+	case $1 in
+		--) shift; break;;
+		--if-exists)
+			ignore_missing=1;;
+		-h|--help) usage; exit;;
+		*) usage; exit 1;;
+	esac
+	shift
+done
+
+[[ $EUID = 0 ]] || {
+	echo "ERROR: ${0##*/} requires root" >&2
+	exit 1
+}
+source read-mount-table.bash || exit
+
+source=$1; shift
+dest=$1; shift
+[[ $1 = -- ]] && shift
+(( $# )) || { usage; exit 1; }
+
+if [[ -e $source && -e $dest ]]; then
+	dest_mountpoint=$(stat -c %m "$dest")
+	dest_mid=${relroot_to_mid[$dest_mountpoint]}
+	if [[ ${mid_to_options_str[$dest_mid]} = *" shared:"* ]]; then
+		echo "ERROR: $dest_mid has not been unshared" >&2
+		exit 1
+	fi
+	mount -o bind -- "$source" "$dest" || exit
+else
+	if [[ $ignore_missing ]]; then
+		echo "WARNING: Either $source or $dest does not exist" >&2
+	else
+		echo "ERROR: Either $source or $dest does not exist" >&2
+		exit 1
+	fi
+fi
+
+exec -- "$@"

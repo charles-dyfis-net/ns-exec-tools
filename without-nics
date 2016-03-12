@@ -1,0 +1,42 @@
+#!/bin/bash
+
+usage() {
+	echo "Usage: ${0##*/} [--except] nic... -- cmd [arg]..." >&2
+	exit 1
+}
+
+if ! type -P lxc-unshare >/dev/null 2>&1; then
+	echo "ERROR: lxc-unshare required but not installed" >&2
+	exit 1
+fi
+
+except=0
+while [[ $1 = -* ]]; do
+	case $1 in
+		--except)	except=1 ;;
+		-h|--help)	usage; exit;;
+		--)		break;;
+	esac
+	shift
+done
+
+declare -A nics=( )
+while [[ $1 != -- ]]; do
+	nics[$1]=1
+	shift
+done
+[[ $1 = -- ]] && shift
+
+cmd=( "$@" )
+
+if (( except )); then
+	nic_args=( )
+	for nic in "${!nics[@]}"; do
+		nic_args+=( -i "$nic" )
+	done
+else
+	while IFS=': ' read -r _ nic _; do
+		[[ ${nics[$nic]} ]] || nic_args+=( -i "$nic" )
+	done < <(ip -o link list)
+fi
+exec -- lxc-unshare -s NETWORK "${nic_args[@]}" -- "${cmd[@]}"

@@ -1,0 +1,175 @@
+#!/bin/bash -e
+
+name=${0##*/}
+printf -v name_pad "%${#name}s" ''
+
+usage_content=(
+	"Usage: ${0##*/} [--except]"
+	"       ${name_pad} --fs-type=* [--fs-type=*]..."
+	"       ${name_pad} -- cmd args..."
+	''
+	"Usage: ${0##*/} [--except]"
+	"       ${name_pad} [--subtree=dir]..."
+	"       ${name_pad} [mount-point] ..."
+	"       ${name_pad} -- cmd arg1 arg2 ..."
+	''
+	'  Removes mount table entries matching (or not matching) a'
+	'  specification from the current namespace, and runs a specified'
+	'  command. Refuses to operate in a shared namespace.'
+	''
+	'  Intended for use with the util-linux unshare utility.'
+	'  Example:'
+	''
+	'    unshare --mount -- \'
+	'      without-mounts --except /usr/bin /var/log /proc -- \'
+	'      runuser -u log -- \'
+	'      syslogd'
+)
+
+usage() {
+	printf '%s\n' "${usage_content[@]}"
+}
+
+safe_umount() {
+	local relroot option_str retval
+	relroot=$1
+	mid=${relroot_to_mid[$relroot]}
+
+	[[ ${done_mids[$mid]} ]] && return
+
+	[[ $mid ]] || {
+		echo "ERROR: $relroot not recognized as a mount point" >&2
+		return 1
+	}
+	option_str=${mid_to_option_str[$mid]}
+	if [[ $option_str = *" shared:"* ]]; then
+		echo "ERROR: $relroot has not been unshared" >&2
+		return 1
+	fi
+	{ (( dry_run )) || umount -l -R "$relroot"; }; retval=$?
+	flag_done "$mid"
+	return "$retval"
+}
+
+# mark a MID as a target
+declare -A flagged_mids=( )
+flag_mid() {
+	local mid=$1
+
+	[[ ${flagged_mids[$mid]} ]] && return
+	flagged_mids[$mid]=1
+
+	if (( except )); then
+		local pmid=${mid_to_pmid[$mid]}
+		if [[ $pmid ]] && ! [[ ${flagged_mids[$pmid]} ]]; then
+			flag_mid "$pmid"
+		fi
+	fi
+}
+
+# mark a mid as unmounted
+declare -A done_mids=( )
+flag_done() {
+	local mid cmid cmids_str
+	local -a cmids
+
+	mid=$1
+	[[ ${done_mids[$mid]} ]] && return
+
+	done_mids[$mid]=1
+	cmids_str=${pmid_to_mids[$mid]}
+	read -r -a cmids <<<"$cmids_str"
+	for cmid in "${cmids[@]}"; do
+		flag_done "$cmid"
+	done
+}
+
+source read-mount-table.bash || exit
+
+declare -A fs_types=( )
+declare -A subtrees=( )
+except=0
+dry_run=0
+
+while [[ $1 = -* ]]; do
+	case $1 in
+		--)		break;;
+		--dry-run)	dry_run=1;;
+		--fs-type=*)	fs_types[${1#*=}]=1;;
+		--except)	except=1;;
+		--subtree=*)	subtrees[${1#*=}]=1;;
+		-h|--help)	usage; exit;;
+		*)		usage; exit 1;;
+	esac
+	shift
+done
+
+(( dry_run )) || [[ $EUID = 0 ]] || {
+	echo "ERROR: ${0##*/} requires root" >&2
+	exit 1
+}
+
+targets=( )
+while (( $# )) && [[ $1 != -- ]]; do
+	targets+=( "$1" )
+	shift
+done
+[[ $1 = -- ]] && shift
+cmd=( "$@" )
+
+(( ${#cmd[@]} )) || { usage; exit 1; }
+
+if (( ${#fs_types[@]} )); then
+	if (( ${#subtrees[@]} )); then
+		echo "ERROR: Subtree support is not enabled when filtering by fs type" >&2
+		exit 1
+	fi
+	if (( ${#targets[@]} )); then
+		echo "ERROR: Explicit target support is not enabled when filtering by fs type" >&2
+		exit 1
+	fi
+fi
+
+# flag mount IDs matching given fs types
+for mid in "${!mid_to_fstype[@]}"; do
+	fstype=${mid_to_fstype[$mid]}
+	if [[ ${fs_types[$fstype]} || ${fs_types[${fstype%.*}]} ]]; then
+		flag_mid "$mid"
+	fi
+done
+
+# flag mount IDs given in explicit targets
+for target in "${targets[@]}" "${!subtrees[@]}"; do
+	target_mid=${relroot_to_mid[$target]}
+	if [[ $target_mid ]]; then
+		flag_mid "$target_mid"
+	elif (( except )); then
+		# when in whitelist mode, find and whitelist the mount point
+		target_mnt=$(stat -c %m "$target")
+		target_mid=${relroot_to_mid[$target_mnt]}
+		flag_mid "$target_mid"
+	fi
+
+	if [[ ${subtrees[$target]} ]] && (( except )); then
+		for relroot in "${!relroot_to_mid[@]}"; do
+			if [[ $relroot = "${target%/}"/* ]]; then
+				subtree_mid=${relroot_to_mid[$relroot]}
+				flagged_mids[$subtree_mid]=1
+			fi
+		done
+	fi
+done
+
+if (( except )); then
+	for mid in "${!mid_to_relroot[@]}"; do
+		[[ ${flagged_mids[$mid]} ]] && continue
+		relroot=${mid_to_relroot[$mid]}
+		safe_umount "$relroot" || exit
+	done
+else
+	for mid in "${flagged_mids[@]}"; do
+		safe_umount "$relroot"
+	done
+fi
+
+exec -- "${cmd[@]}"

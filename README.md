@@ -46,3 +46,15 @@ Provides equivalent operation to `without-mounts`, but for Ethernet devices.
     without-nics --except eth1 eth2 -- foo arg1 arg2 ...
 
 ...will run `foo` with any NIC which is not `lo`, `eth1`, or `eth2` invisible.
+
+# Dependencies
+
+Runtime dependencies include:
+
+- bash 4.x
+- A linux kernel with the relevant features. Obviously.
+- util-linux 2.27 or newer, for `unshare`
+- `lxc` (for `without-nics`, which uses `lxc-unshare`).
+  The util-linux `unshare`, like iproute2, uses `unshare(CLONE_NEWNET)`, which creates a new network namespace which contains only `lo`. By contrast, `lxc-unshare` uses `clone(CLONE_NEWNET)` to create a new namespace which contains all of the parent's devices, from which undesired devices can then be removed. This latter behavior is more approprate for the tools at hand.
+
+Any rewrite to a non-bash language will probably be in Go. It's also probably only going to happen if my employer decides to pay for it; as long as this is a personal project, I'm going the perverse route. :)

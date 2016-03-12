@@ -63,4 +63,4 @@ Any rewrite to a non-bash language will probably be in Go. It's also probably on
 
 # Contributing
 
-Please make sure all code runs clean with (shellcheck)[http://www.shellcheck.net/].
+Please make sure all code runs clean with [shellcheck](http://www.shellcheck.net/).

@@ -39,6 +39,8 @@ In the "mode 2" example here, we used the `--except` flag to invert the match, u
 
 Note that `--fs-type` cannot be directly mixed with either `--subtree=*` or an explicit list of locations; only one mode or the other can be used. However, invocations of different types can be chained: A `without-mounts --fstype=nfs` can then call `--without-mounts --except` with a list of paths.
 
+Note: `--subtree` only makes a particular lot of sense in `--except` mode, as `without-mounts` always acts recursively downward: `without-mounts /usr/local` will implicitly unmount `/usr/local/share`, but `without-mounts --except /usr/local` won't protect `/usr/local/share` (as opposed to `without-mounts --except --subtree=/usr/local`, which will).
+
 ## without-nics
 
 Provides equivalent operation to `without-mounts`, but for Ethernet devices.
@@ -58,3 +60,7 @@ Runtime dependencies include:
   The util-linux `unshare`, like iproute2, uses `unshare(CLONE_NEWNET)`, which creates a new network namespace which contains only `lo`. By contrast, `lxc-unshare` uses `clone(CLONE_NEWNET)` to create a new namespace which contains all of the parent's devices, from which undesired devices can then be removed. This latter behavior is more approprate for the tools at hand.
 
 Any rewrite to a non-bash language will probably be in Go. It's also probably only going to happen if my employer decides to pay for it; as long as this is a personal project, I'm going the perverse route. :)
+
+# Contributing
+
+Please make sure all code runs clean with (shellcheck)[http://www.shellcheck.net/].

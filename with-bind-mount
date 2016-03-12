@@ -8,7 +8,7 @@ usage() {
 	printf '%s\n' "${usage_content[@]}"
 }
 
-ignore_failure=0
+ignore_missing=0
 
 (( $# > 2 )) || { usage; exit 1; }
 

@@ -20,10 +20,10 @@ usage_content=(
 	'  Intended for use with the util-linux unshare utility.'
 	'  Example:'
 	''
-	'    unshare --mount -- \'
-	'      without-mounts --except /usr/bin /var/log /proc -- \'
-	'      runuser -u log -- \'
-	'      syslogd'
+	"    unshare --mount -- \\"
+	"      without-mounts --except /usr/bin /var/log /proc -- \\"
+	"      runuser -u log -- \\"
+	"      syslogd"
 )
 
 usage() {
@@ -31,7 +31,7 @@ usage() {
 }
 
 safe_umount() {
-	local relroot option_str retval
+	local relroot options_str retval
 	relroot=$1
 	mid=${relroot_to_mid[$relroot]}
 
@@ -41,8 +41,8 @@ safe_umount() {
 		echo "ERROR: $relroot not recognized as a mount point" >&2
 		return 1
 	}
-	option_str=${mid_to_option_str[$mid]}
-	if [[ $option_str = *" shared:"* ]]; then
+	options_str=${mid_to_options_str[$mid]}
+	if [[ $options_str = *" shared:"* ]]; then
 		echo "ERROR: $relroot has not been unshared" >&2
 		return 1
 	fi

@@ -38,12 +38,12 @@ if [[ -e $source && -e $dest ]]; then
 	dest_mountpoint=$(stat -c %m "$dest")
 	dest_mid=${relroot_to_mid[$dest_mountpoint]}
 	if [[ ${mid_to_options_str[$dest_mid]} = *" shared:"* ]]; then
-		echo "ERROR: $dest_mid has not been unshared" >&2
+		echo "ERROR: $dest_mountpoint has not been unshared" >&2
 		exit 1
 	fi
 	mount -o bind -- "$source" "$dest" || exit
 else
-	if [[ $ignore_missing ]]; then
+	if (( ignore_missing )); then
 		echo "WARNING: Either $source or $dest does not exist" >&2
 	else
 		echo "ERROR: Either $source or $dest does not exist" >&2

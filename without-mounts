@@ -167,7 +167,8 @@ if (( except )); then
 		safe_umount "$relroot" || exit
 	done
 else
-	for mid in "${flagged_mids[@]}"; do
+	for mid in "${!flagged_mids[@]}"; do
+		relroot=${mid_to_relroot[$mid]}
 		safe_umount "$relroot"
 	done
 fi
